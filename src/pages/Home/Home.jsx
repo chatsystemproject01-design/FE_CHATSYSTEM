@@ -52,7 +52,7 @@ function Home() {
   const [showSummaryModal, setShowSummaryModal] = useState(false)
   const [isSummarizing, setIsSummarizing] = useState(false)
   const [aiBotMessages, setAiBotMessages] = useState([
-    { role: 'assistant', content: 'Chào bạn! Tôi là trợ lý AI nội bộ của doanh nghiệp. Bạn có thể hỏi tôi bất cứ điều gì về quy định, chính sách hoặc thông tin công việc.' }
+    { role: 'assistant', content: 'Chào bạn! Tôi là phòng hỗ trợ trực tuyến của doanh nghiệp. Bạn có thể hỏi tôi bất cứ điều gì về quy định, chính sách hoặc thông tin công việc.' }
   ])
   const [aiBotInput, setAiBotInput] = useState('')
   const [isAiProcessing, setIsAiProcessing] = useState(false)
@@ -64,6 +64,14 @@ function Home() {
   const [adminSubTab, setAdminSubTab] = useState('all') // 'all' or 'pending'
   const [showCreateUserModal, setShowCreateUserModal] = useState(false)
   const [newUserForm, setNewUserForm] = useState({ email: '', fullName: '', password: '', roleId: 2 }) // 1: Admin, 2: Staff
+  
+  // Dashboard Stats State
+  const [dashboardStats, setDashboardStats] = useState(null)
+  const [isStatsLoading, setIsStatsLoading] = useState(false)
+  
+  // Audit Logs State
+  const [auditLogs, setAuditLogs] = useState([])
+  const [isAuditLogsLoading, setIsAuditLogsLoading] = useState(false)
 
   // Content Management State
   const [reports, setReports] = useState([])
@@ -534,9 +542,13 @@ function Home() {
 
   const fetchAdminConversations = async () => {
     try {
+      console.log('[AUDIT] Fetching admin conversations...')
       const resp = await axios.get(`${API_URL}/admin/conversations`, axiosConfig)
+      console.log('[AUDIT] Response:', resp.data)
       if (resp.data.success) setAdminConversations(resp.data.data || [])
-    } catch (err) {}
+    } catch (err) {
+      console.error('[AUDIT] Error fetching conversations:', err.response?.data || err.message)
+    }
   }
 
   const handleSelectAuditConversation = (cid) => {
@@ -587,6 +599,34 @@ function Home() {
     } catch (err) { alert('Cập nhật thất bại') }
   }
 
+  const fetchAuditLogs = async () => {
+    setIsAuditLogsLoading(true)
+    try {
+      const resp = await axios.get(`${API_URL}/admin/audit-logs`, axiosConfig)
+      if (resp.data.success) {
+        setAuditLogs(resp.data.data || [])
+      }
+    } catch (err) {
+      console.error("Lỗi khi tải lịch sử hành động:", err)
+    } finally {
+      setIsAuditLogsLoading(false)
+    }
+  }
+
+  const fetchDashboardStats = async () => {
+    setIsStatsLoading(true)
+    try {
+      const resp = await axios.get(`${API_URL}/admin/dashboard/stats`, axiosConfig)
+      if (resp.data.success) {
+        setDashboardStats(resp.data.data)
+      }
+    } catch (err) {
+      console.error("Lỗi khi tải thống kê Dashboard:", err)
+    } finally {
+      setIsStatsLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (!user && !sessionStorage.getItem('access_token')) {
       navigate('/login')
@@ -601,6 +641,8 @@ function Home() {
     if (activeTab === 'admin') { fetchPendingUsers(); fetchAdminUsers(); }
     if (activeTab === 'content') { fetchReports(); fetchAdminConversations(); }
     if (activeTab === 'config') { fetchSystemConfig(); fetchSystemHealth(); }
+    if (activeTab === 'auditLogs') fetchAuditLogs();
+    if (activeTab === 'overview' && user.role?.toLowerCase() === 'admin') fetchDashboardStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
 
@@ -636,8 +678,8 @@ function Home() {
           <div className="sidebar-divider" style={{ height: '1px', background: '#eee', margin: '0.5rem 1rem' }}></div>
 
           <div className={`nav-item ${activeTab === 'aibot' ? 'active' : ''}`} onClick={() => setActiveTab('aibot')}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
-            <span>Hỏi đáp AI</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+            <span>Hỏi đáp nội bộ</span>
           </div>
 
           {user.role?.toLowerCase() === 'admin' && (
@@ -651,6 +693,13 @@ function Home() {
             <div className={`nav-item ${activeTab === 'content' ? 'active' : ''}`} onClick={() => setActiveTab('content')}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
               <span>Quản lý nội dung</span>
+            </div>
+          )}
+
+          {user.role?.toLowerCase() === 'admin' && (
+            <div className={`nav-item ${activeTab === 'auditLogs' ? 'active' : ''}`} onClick={() => setActiveTab('auditLogs')}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+              <span>Lịch sử hành động</span>
             </div>
           )}
 
@@ -674,11 +723,65 @@ function Home() {
         <header className="top-header">
           <div style={{ fontWeight: 700, fontSize: '1.2rem' }}>Chào mừng, {user.fullName}</div>
           <div className="user-profile-summary">
-            <div className="user-avatar-small" style={{ width: 38, height: 38, borderRadius: '50%', background: '#0084ff', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{user.fullName?.charAt(0)}</div>
+            <div className="user-avatar-small" style={{ width: 38, height: 38, borderRadius: '50%', background: '#2563eb', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{user.fullName?.charAt(0)}</div>
           </div>
         </header>
 
         <section className="content-area">
+          {activeTab === 'overview' && (
+            <div className="admin-dashboard fade-in">
+              <div className="section-header">
+                <h2>Tổng quan hệ thống</h2>
+                <p>Chào mừng trở lại! Dưới đây là tình hình hoạt động của doanh nghiệp hôm nay.</p>
+              </div>
+
+              {user.role?.toLowerCase() === 'admin' ? (
+                <div className="admin-stats-grid">
+                  <div className="stat-card blue">
+                    <div className="stat-icon">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    </div>
+                    <div className="stat-info">
+                      <span className="stat-label">Đang hoạt động</span>
+                      <h3 className="stat-value">{dashboardStats?.onlineUsers || 0}</h3>
+                      <span className="stat-trend positive">Đang truy cập</span>
+                    </div>
+                  </div>
+
+                  <div className="stat-card indigo">
+                    <div className="stat-icon">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                    </div>
+                    <div className="stat-info">
+                      <span className="stat-label">Tổng tin nhắn</span>
+                      <h3 className="stat-value">{dashboardStats?.totalMessages?.toLocaleString('vi-VN') || 0}</h3>
+                      <span className="stat-trend positive">Toàn bộ hệ thống</span>
+                    </div>
+                  </div>
+
+                  <div className="stat-card green">
+                    <div className="stat-icon">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                    </div>
+                    <div className="stat-info">
+                      <span className="stat-label">Sức khỏe hệ thống</span>
+                      <h3 className="stat-value">{dashboardStats?.system?.cpu || '0%'}</h3>
+                      <span className="stat-trend">{dashboardStats?.system?.ram || '0/0GB'} RAM </span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ background: '#f8fafc', padding: '3rem', borderRadius: '24px', textAlign: 'center', marginTop: '2rem' }}>
+                   <div style={{ width: '80px', height: '80px', background: '#e2e8f0', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                   </div>
+                   <h3 style={{ color: '#1e293b', marginBottom: '0.5rem' }}>Chào mừng đến với Nexus Chat</h3>
+                   <p style={{ color: '#64748b' }}>Bạn đang trong khu vực làm việc an toàn của doanh nghiệp.</p>
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab === 'messages' && (
             <div className="chat-interface">
               <div className={`conv-sidebar ${activeChat ? 'mobile-hide' : ''}`}>
@@ -699,7 +802,7 @@ function Home() {
                         </div>
                       ))}
                     </div>
-                    <button onClick={createGroupChat} style={{ width: '100%', background: '#0084ff', color: 'white', border: 'none', padding: '0.5rem', borderRadius: '8px', fontWeight: 700, marginTop: '0.5rem' }}>Tạo nhóm</button>
+                    <button onClick={createGroupChat} style={{ width: '100%', background: '#2563eb', color: 'white', border: 'none', padding: '0.5rem', borderRadius: '8px', fontWeight: 700, marginTop: '0.5rem' }}>Tạo nhóm</button>
                   </div>
                 )}
                 <div className="conv-list">
@@ -724,7 +827,7 @@ function Home() {
                         <div style={{ minWidth: 0 }}>
                           <h4>{chatDetail?.conversationName || '...'}</h4>
                           {Object.keys(typingUsers[activeChat] || {}).length > 0 && (
-                            <small style={{ color: '#0084ff', fontSize: '0.75rem' }}>
+                            <small style={{ color: '#2563eb', fontSize: '0.75rem' }}>
                               {Object.values(typingUsers[activeChat]).join(', ')} đang nhập...
                             </small>
                           )}
@@ -739,8 +842,8 @@ function Home() {
                             <button className="icon-btn" onClick={() => handleInitiateCall('video')} title="Gọi video">
                               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
                             </button>
-                            <button className="icon-btn ai-summary-btn" onClick={handleSummarize} title="AI Tóm tắt" style={{ color: '#7c3aed' }}>
-                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                            <button className="icon-btn ai-summary-btn" onClick={handleSummarize} title="Tóm tắt nội dung" style={{ color: 'var(--primary-blue)' }}>
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
                             </button>
                           </>
                         )}
@@ -795,18 +898,18 @@ function Home() {
                               <span style={{ fontSize: '0.8rem', color: 'white' }}>⏹️</span>
                             </div>
                           ) : (
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="#0084ff"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" /><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" /></svg>
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="#2563eb"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" /><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" /></svg>
                           )}
                         </button>
                         <label className="icon-btn" title="Đính kèm">
                           <input type="file" style={{ display: 'none' }} onChange={handleFileUpload} />
-                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0084ff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" /></svg>
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" /></svg>
                         </label>
                       </div>
                       <div className="input-wrapper">
                         <input type="text" placeholder="Aa" value={newMessage} onChange={e => { setNewMessage(e.target.value); handleTyping() }} disabled={isRecording} />
                       </div>
-                      <button type="submit" className="send-btn" disabled={isRecording || !newMessage.trim()} style={{ background: (!newMessage.trim() || isRecording) ? '#f0f2f5' : '#0084ff' }}>
+                      <button type="submit" className="send-btn" disabled={isRecording || !newMessage.trim()} style={{ background: (!newMessage.trim() || isRecording) ? '#f0f2f5' : '#2563eb' }}>
                         <svg width="20" height="20" viewBox="0 0 24 24" fill={(!newMessage.trim() || isRecording) ? "#bcc0c4" : "#ffffff"}><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" /></svg>
                       </button>
                     </form>
@@ -892,10 +995,10 @@ function Home() {
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></svg>
                             </button>
                             <button className="btn-card-action text-danger" onClick={() => handleBlockUser(c.userId)} title="Chặn">
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
                             </button>
                             <button className="btn-card-action text-danger" onClick={() => handleRemoveContact(c.userId)} title="Xóa">
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" /></svg>
                             </button>
                           </div>
                         </div>
@@ -1164,10 +1267,10 @@ function Home() {
 
           {activeTab === 'aibot' && (
             <div className="ai-bot-container" style={{ height: 'calc(100vh - 160px)', display: 'flex', flexDirection: 'column', background: 'white', borderRadius: '20px', overflow: 'hidden', border: '1px solid #eee', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
-              <div className="ai-bot-header" style={{ padding: '1.5rem', background: 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)', color: 'white' }}>
+              <div className="ai-bot-header" style={{ padding: '1.5rem', background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', color: 'white' }}>
                 <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a10 10 0 0 1 10 10 10 10 0 0 1-10 10 10 10 0 0 1-10-10 10 10 0 0 1 10-10z"></path><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>
-                  Trợ lý AI Nội bộ
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+                  Hỗ trợ giải đáp nội bộ
                 </h3>
                 <p style={{ margin: '5px 0 0', opacity: 0.8, fontSize: '0.9rem' }}>Giải đáp thắc mắc về quy định, chính sách và dữ liệu nội bộ.</p>
               </div>
@@ -1175,14 +1278,15 @@ function Home() {
               <div className="ai-bot-messages" style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', background: '#f8fafc' }}>
                 {aiBotMessages.map((m, idx) => (
                   <div key={idx} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '80%', display: 'flex', flexDirection: 'column', alignItems: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
-                    <div style={{ padding: '0.8rem 1.2rem', borderRadius: m.role === 'user' ? '18px 18px 0 18px' : '18px 18px 18px 0', background: m.role === 'user' ? '#7c3aed' : 'white', color: m.role === 'user' ? 'white' : '#1e293b', boxShadow: m.role === 'user' ? '0 4px 12px rgba(124, 58, 237, 0.2)' : '0 4px 12px rgba(0,0,0,0.03)', border: m.role === 'user' ? 'none' : '1px solid #f1f5f9', whiteSpace: 'pre-wrap' }}>
+                    <div style={{ padding: '0.8rem 1.2rem', borderRadius: m.role === 'user' ? '18px 18px 0 18px' : '18px 18px 18px 0', background: m.role === 'user' ? '#2563eb' : 'white', color: m.role === 'user' ? 'white' : '#1e293b', boxShadow: m.role === 'user' ? '0 4px 12px rgba(37, 99, 235, 0.2)' : '0 4px 12px rgba(0,0,0,0.03)', border: m.role === 'user' ? 'none' : '1px solid #f1f5f9', whiteSpace: 'pre-wrap' }}>
                       {m.content}
                     </div>
                   </div>
                 ))}
                 {isAiProcessing && (
-                  <div style={{ alignSelf: 'flex-start', background: 'white', padding: '0.8rem 1.2rem', borderRadius: '18px 18px 18px 0', boxShadow: '0 4px 12px rgba(0,0,0,0.03)', border: '1px solid #f1f5f9' }}>
-                    <div className="typing-dots"><span></span><span></span><span></span></div>
+                  <div style={{ alignSelf: 'flex-start', background: 'white', padding: '0.8rem 1.2rem', borderRadius: '18px 18px 18px 0', boxShadow: '0 4px 12px rgba(0,0,0,0.03)', border: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#64748b' }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'spin 1s linear infinite' }}><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
+                    Đang xử lý...
                   </div>
                 )}
                 <div ref={messagesEndRef} />
@@ -1195,10 +1299,10 @@ function Home() {
                   onChange={e => setAiBotInput(e.target.value)} 
                   placeholder="Nhập câu hỏi tại đây..." 
                   style={{ flex: 1, padding: '0.75rem 1.2rem', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none', transition: 'all 0.2s' }}
-                  onFocus={(e) => e.target.style.borderColor = '#7c3aed'}
+                  onFocus={(e) => e.target.style.borderColor = '#2563eb'}
                   onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
                 />
-                <button type="submit" disabled={!aiBotInput.trim() || isAiProcessing} style={{ padding: '0.75rem 1.5rem', borderRadius: '12px', background: (!aiBotInput.trim() || isAiProcessing) ? '#f1f5f9' : '#7c3aed', color: 'white', border: 'none', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <button type="submit" disabled={!aiBotInput.trim() || isAiProcessing} style={{ padding: '0.75rem 1.5rem', borderRadius: '12px', background: (!aiBotInput.trim() || isAiProcessing) ? '#f1f5f9' : '#2563eb', color: 'white', border: 'none', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <span>Gửi</span>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
                 </button>
@@ -1210,17 +1314,17 @@ function Home() {
             <div className="modal-overlay" onClick={() => setShowSummaryModal(false)}>
               <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px', width: '90%' }}>
                 <div className="modal-header" style={{ borderBottom: '1px solid #eee', paddingBottom: '1rem', marginBottom: '1.5rem' }}>
-                  <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#7c3aed' }}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-                    AI Tóm tắt hội thoại
+                  <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#2563eb' }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                    Tóm tắt nội dung hội thoại
                   </h3>
                   <button className="btn-close" onClick={() => setShowSummaryModal(false)}>✖</button>
                 </div>
                 <div className="summary-body" style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '15px', border: '1px solid #e2e8f0', minHeight: '150px', maxHeight: '400px', overflowY: 'auto' }}>
                   {isSummarizing ? (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', padding: '2rem' }}>
-                      <div className="typing-dots"><span></span><span></span><span></span></div>
-                      <span style={{ color: '#64748b', fontSize: '0.9rem' }}>AI đang đọc cuộc trò chuyện...</span>
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'spin 1s linear infinite', color: '#2563eb' }}><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
+                      <span style={{ color: '#64748b', fontSize: '0.9rem' }}>Đang đọc cuộc trò chuyện...</span>
                     </div>
                   ) : (
                     <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6', color: '#334155' }}>
@@ -1229,7 +1333,7 @@ function Home() {
                   )}
                 </div>
                 <div className="modal-footer" style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end' }}>
-                  <button className="btn-primary" onClick={() => setShowSummaryModal(false)} style={{ background: '#7c3aed' }}>Đóng</button>
+                  <button className="btn-primary" onClick={() => setShowSummaryModal(false)} style={{ background: '#2563eb' }}>Đóng</button>
                 </div>
               </div>
             </div>
@@ -1242,43 +1346,45 @@ function Home() {
                   <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: '#1e293b' }}>Quản lý nhân sự</h2>
                   <p style={{ color: '#64748b' }}>Cấp tài khoản, duyệt thành viên và quản lý quyền hạn.</p>
                 </div>
-                <button className="btn-primary" onClick={() => setShowCreateUserModal(true)} style={{ background: '#f59e0b', boxShadow: '0 4px 12px rgba(245, 158, 11, 0.2)' }}>
+                <button className="btn-primary" onClick={() => setShowCreateUserModal(true)} style={{ background: '#2563eb', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)' }}>
                   + Cấp tài khoản mới
                 </button>
               </div>
 
               <div className="admin-tabs" style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid #eee' }}>
-                <button onClick={() => setAdminSubTab('all')} style={{ padding: '0.75rem 1.5rem', border: 'none', background: 'none', borderBottom: adminSubTab === 'all' ? '3px solid #f59e0b' : 'none', fontWeight: 600, color: adminSubTab === 'all' ? '#f59e0b' : '#64748b', cursor: 'pointer' }}>Tất cả nhân viên</button>
-                <button onClick={() => setAdminSubTab('pending')} style={{ padding: '0.75rem 1.5rem', border: 'none', background: 'none', borderBottom: adminSubTab === 'pending' ? '3px solid #f59e0b' : 'none', fontWeight: 600, color: adminSubTab === 'pending' ? '#f59e0b' : '#64748b', cursor: 'pointer' }}>
+                <button onClick={() => setAdminSubTab('all')} style={{ padding: '0.75rem 1.5rem', border: 'none', background: 'none', borderBottom: adminSubTab === 'all' ? '3px solid #2563eb' : 'none', fontWeight: 600, color: adminSubTab === 'all' ? '#2563eb' : '#64748b', cursor: 'pointer' }}>Tất cả nhân viên</button>
+                <button onClick={() => setAdminSubTab('pending')} style={{ padding: '0.75rem 1.5rem', border: 'none', background: 'none', borderBottom: adminSubTab === 'pending' ? '3px solid #2563eb' : 'none', fontWeight: 600, color: adminSubTab === 'pending' ? '#2563eb' : '#64748b', cursor: 'pointer' }}>
                   Chờ duyệt {pendingUsers.length > 0 && <span style={{ background: '#ef4444', color: 'white', padding: '1px 6px', borderRadius: '10px', fontSize: '0.7rem' }}>{pendingUsers.length}</span>}
                 </button>
               </div>
 
               <div className="admin-content-list" style={{ background: 'white', borderRadius: '20px', padding: '1.5rem', border: '1px solid #eee', minHeight: '400px' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <table className="admin-modern-table">
                   <thead>
-                    <tr style={{ textAlign: 'left', borderBottom: '2px solid #f1f5f9', color: '#64748b', fontSize: '0.9rem' }}>
-                      <th style={{ padding: '1rem' }}>Nhân viên</th>
-                      <th style={{ padding: '1rem' }}>Chức vụ / Email</th>
-                      <th style={{ padding: '1rem' }}>Quyền</th>
-                      <th style={{ padding: '1rem' }}>Trạng thái</th>
-                      <th style={{ padding: '1rem' }}>Thao tác</th>
+                    <tr>
+                      <th>Nhân viên</th>
+                      <th>Chức vụ / Email</th>
+                      <th>Quyền</th>
+                      <th>Trạng thái</th>
+                      <th>Thao tác</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(adminSubTab === 'all' ? adminUsers : pendingUsers).map(u => (
-                      <tr key={u.userId} style={{ borderBottom: '1px solid #f8fafc', transition: 'all 0.2s' }}>
-                        <td style={{ padding: '1rem' }}>
+                      <tr key={u.userId}>
+                        <td>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                            <div className="user-avatar-small" style={{ background: '#f59e0b' }}>{u.fullName?.charAt(0)}</div>
-                            <span style={{ fontWeight: 600 }}>{u.fullName}</span>
+                            <div className="user-avatar-small" style={{ background: '#2563eb' }}>{u.fullName?.charAt(0)}</div>
+                            <span className="user-primary">{u.fullName}</span>
                           </div>
                         </td>
-                        <td style={{ padding: '1rem' }}>
-                          <div style={{ fontSize: '0.85rem' }}>{u.position || 'Nhân viên'}</div>
-                          <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{u.email || u.userName}</div>
+                        <td>
+                          <div className="admin-user-info">
+                            <span className="user-primary" style={{ fontSize: '0.9rem' }}>{u.position || 'Nhân viên'}</span>
+                            <span className="user-secondary">{u.email || u.userName}</span>
+                          </div>
                         </td>
-                        <td style={{ padding: '1rem' }}>
+                        <td>
                           <select 
                             value={u.role || 'staff'} 
                             onChange={(e) => updateUserRole(u.userId, e.target.value === 'admin' ? 1 : 2)}
@@ -1288,21 +1394,27 @@ function Home() {
                             <option value="admin">Admin</option>
                           </select>
                         </td>
-                        <td style={{ padding: '1rem' }}>
-                          <span style={{ padding: '4px 8px', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 700, background: u.status === 'locked' ? '#fee2e2' : '#ecfdf5', color: u.status === 'locked' ? '#ef4444' : '#10b981', textTransform: 'uppercase' }}>
+                        <td>
+                          <span className={`status-pill ${u.status === 'locked' ? 'rejected' : 'resolved'}`}>
                             {u.status || 'active'}
                           </span>
                         </td>
-                        <td style={{ padding: '1rem' }}>
-                          <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <td>
+                          <div className="admin-actions-cell">
                             {adminSubTab === 'pending' ? (
-                              <button onClick={() => handleApproveUser(u.userId)} className="btn-mini-action" style={{ background: '#f59e0b', color: 'white' }}>Duyệt</button>
+                              <button onClick={() => handleApproveUser(u.userId)} className="btn-mini-action" style={{ background: '#2563eb', color: 'white' }}>Duyệt</button>
                             ) : (
                               <>
                                 <button onClick={() => updateUserStatus(u.userId, u.status === 'locked' ? 'active' : 'locked')} className="btn-mini-action" title={u.status === 'locked' ? 'Mở khóa' : 'Khóa'}>
-                                  {u.status === 'locked' ? '🔓' : '🔒'}
+                                  {u.status === 'locked' ? (
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1" /></svg>
+                                  ) : (
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                                  )}
                                 </button>
-                                <button onClick={() => deleteUser(u.userId)} className="btn-mini-action delete" title="Xóa">🗑️</button>
+                                <button onClick={() => deleteUser(u.userId)} className="btn-mini-action delete" title="Xóa">
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" /></svg>
+                                </button>
                               </>
                             )}
                           </div>
@@ -1320,34 +1432,56 @@ function Home() {
 
           {showCreateUserModal && (
             <div className="modal-overlay" onClick={() => setShowCreateUserModal(false)}>
-              <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
-                <div className="modal-header">
-                  <h3>Cấp tài khoản nhân viên</h3>
-                  <button className="btn-close" onClick={() => setShowCreateUserModal(false)}>✖</button>
+              <div className="create-user-modal" onClick={e => e.stopPropagation()}>
+                <div className="create-user-header">
+                  <div className="create-user-header-info">
+                    <div className="create-user-icon">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+                    </div>
+                    <div>
+                      <h3 className="create-user-title">Cấp tài khoản nhân viên</h3>
+                      <p className="create-user-subtitle">Điền thông tin để tạo tài khoản mới cho nhân sự</p>
+                    </div>
+                  </div>
+                  <button className="create-user-close" onClick={() => setShowCreateUserModal(false)} type="button">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                  </button>
                 </div>
-                <form onSubmit={handleCreateUser} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
-                  <div className="form-group">
-                    <label>Họ và tên</label>
-                    <input type="text" required value={newUserForm.fullName} onChange={e => setNewUserForm({ ...newUserForm, fullName: e.target.value })} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #ddd' }} />
+
+                <form onSubmit={handleCreateUser} className="create-user-form">
+                  <div className="create-user-fields">
+                    <div className="create-user-field">
+                      <label>Họ và tên</label>
+                      <input type="text" required placeholder="VD: Nguyễn Văn A" value={newUserForm.fullName} onChange={e => setNewUserForm({ ...newUserForm, fullName: e.target.value })} />
+                    </div>
+                    <div className="create-user-field">
+                      <label>Email đăng nhập</label>
+                      <input type="email" required placeholder="VD: nva@company.com" value={newUserForm.email} onChange={e => setNewUserForm({ ...newUserForm, email: e.target.value })} />
+                    </div>
+                    <div className="create-user-field-row">
+                      <div className="create-user-field">
+                        <label>Mật khẩu khởi tạo</label>
+                        <input type="password" required placeholder="Tối thiểu 6 ký tự" value={newUserForm.password} onChange={e => setNewUserForm({ ...newUserForm, password: e.target.value })} />
+                      </div>
+                      <div className="create-user-field">
+                        <label>Vai trò hệ thống</label>
+                        <select value={newUserForm.roleId} onChange={e => setNewUserForm({ ...newUserForm, roleId: parseInt(e.target.value) })}>
+                          <option value={2}>Staff (Nhân viên)</option>
+                          <option value={1}>Admin (Quản trị viên)</option>
+                        </select>
+                      </div>
+                    </div>
                   </div>
-                  <div className="form-group">
-                    <label>Email đăng nhập</label>
-                    <input type="email" required value={newUserForm.email} onChange={e => setNewUserForm({ ...newUserForm, email: e.target.value })} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #ddd' }} />
-                  </div>
-                  <div className="form-group">
-                    <label>Mật khẩu khởi tạo</label>
-                    <input type="password" required value={newUserForm.password} onChange={e => setNewUserForm({ ...newUserForm, password: e.target.value })} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #ddd' }} />
-                  </div>
-                  <div className="form-group">
-                    <label>Vai trò hệ thống</label>
-                    <select value={newUserForm.roleId} onChange={e => setNewUserForm({ ...newUserForm, roleId: parseInt(e.target.value) })} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #ddd' }}>
-                      <option value={2}>Staff (Nhân viên)</option>
-                      <option value={1}>Admin (Quản trị viên)</option>
-                    </select>
-                  </div>
-                  <div className="modal-footer" style={{ marginTop: '1rem' }}>
-                    <button type="button" onClick={() => setShowCreateUserModal(false)}>Hủy</button>
-                    <button type="submit" className="btn-primary" style={{ background: '#f59e0b' }}>Tạo tài khoản</button>
+
+                  <div className="create-user-actions">
+                    <button type="button" className="create-user-btn-cancel" onClick={() => setShowCreateUserModal(false)}>Hủy bỏ</button>
+                    <button type="submit" className="create-user-btn-submit">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+                      Tạo tài khoản
+                    </button>
                   </div>
                 </form>
               </div>
@@ -1400,50 +1534,60 @@ function Home() {
               </div>
 
               <div className="admin-tabs" style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid #eee' }}>
-                <button onClick={() => setContentSubTab('reports')} style={{ padding: '0.75rem 1.5rem', border: 'none', background: 'none', borderBottom: contentSubTab === 'reports' ? '3px solid #ef4444' : 'none', fontWeight: 600, color: contentSubTab === 'reports' ? '#ef4444' : '#64748b', cursor: 'pointer' }}>Báo cáo vi phạm</button>
-                <button onClick={() => setContentSubTab('audit')} style={{ padding: '0.75rem 1.5rem', border: 'none', background: 'none', borderBottom: contentSubTab === 'audit' ? '3px solid #ef4444' : 'none', fontWeight: 600, color: contentSubTab === 'audit' ? '#ef4444' : '#64748b', cursor: 'pointer' }}>Giám sát hội thoại</button>
+                <button onClick={() => setContentSubTab('reports')} style={{ padding: '0.75rem 1.5rem', border: 'none', background: 'none', borderBottom: contentSubTab === 'reports' ? '3px solid #2563eb' : 'none', fontWeight: 600, color: contentSubTab === 'reports' ? '#2563eb' : '#64748b', cursor: 'pointer' }}>Báo cáo vi phạm</button>
+                <button onClick={() => { setContentSubTab('audit'); fetchAdminConversations(); }} style={{ padding: '0.75rem 1.5rem', border: 'none', background: 'none', borderBottom: contentSubTab === 'audit' ? '3px solid #2563eb' : 'none', fontWeight: 600, color: contentSubTab === 'audit' ? '#2563eb' : '#64748b', cursor: 'pointer' }}>Giám sát hội thoại</button>
               </div>
 
               <div className="admin-content-list" style={{ background: 'white', borderRadius: '20px', padding: '1.5rem', border: '1px solid #eee', minHeight: '400px' }}>
                 {contentSubTab === 'reports' ? (
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <table className="admin-modern-table">
                     <thead>
-                      <tr style={{ textAlign: 'left', borderBottom: '2px solid #f1f5f9', color: '#64748b', fontSize: '0.9rem' }}>
-                        <th style={{ padding: '1rem' }}>Người báo cáo</th>
-                        <th style={{ padding: '1rem' }}>Đối tượng vi phạm</th>
-                        <th style={{ padding: '1rem' }}>Lý do & Bằng chứng</th>
-                        <th style={{ padding: '1rem' }}>Trạng thái</th>
-                        <th style={{ padding: '1rem' }}>Thao tác</th>
+                      <tr>
+                        <th>Người báo cáo</th>
+                        <th>Đối tượng vi phạm</th>
+                        <th>Lý do & Bằng chứng</th>
+                        <th>Trạng thái</th>
+                        <th>Thao tác</th>
                       </tr>
                     </thead>
                     <tbody>
                       {reports.map(r => (
-                        <tr key={r.reportId} style={{ borderBottom: '1px solid #f8fafc' }}>
-                          <td style={{ padding: '1rem' }}>
-                            <div style={{ fontWeight: 600 }}>{r.reporter.fullName}</div>
-                            <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{r.reporter.email}</div>
+                        <tr key={r.reportId}>
+                          <td>
+                            <div className="admin-user-info">
+                              <span className="user-primary">{r.reporter.fullName}</span>
+                              <span className="user-secondary">{r.reporter.email}</span>
+                            </div>
                           </td>
-                          <td style={{ padding: '1rem' }}>
+                          <td>
                             {r.reportedUser ? (
-                              <span style={{ color: '#ef4444', fontWeight: 600 }}>{r.reportedUser.fullName}</span>
-                            ) : 'Tin nhắn ẩn danh'}
+                              <span className="violator-name">{r.reportedUser.fullName}</span>
+                            ) : <span className="text-muted">Tin nhắn ẩn danh</span>}
                           </td>
-                          <td style={{ padding: '1rem' }}>
-                            <div style={{ fontWeight: 600, color: '#6b7280' }}>{r.reasonType}</div>
-                            <div style={{ fontSize: '0.85rem', color: '#374151', fontStyle: 'italic' }}>"{r.description}"</div>
-                            {r.reportedMessageId && <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '4px' }}>MsgID: {r.reportedMessageId}</div>}
+                          <td>
+                            <div className="report-reason-cell">
+                              <span className="reason-type">{r.reasonType}</span>
+                              <span className="evidence-quote">"{r.description}"</span>
+                              {r.reportedMessageId && <span className="msg-id-hint">MsgID: {r.reportedMessageId}</span>}
+                            </div>
                           </td>
-                          <td style={{ padding: '1rem' }}>
-                            <span style={{ padding: '4px 8px', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 700, background: r.status === 'processed' ? '#ecfdf5' : '#fff7ed', color: r.status === 'processed' ? '#10b981' : '#f59e0b' }}>
-                              {r.status === 'processed' ? 'ĐÃ XỬ LÝ' : 'ĐANG CHỜ'}
+                          <td>
+                            <span className={`status-pill ${r.status === 'processed' ? 'resolved' : 'pending'}`}>
+                              {r.status === 'processed' ? 'Đã xử lý' : 'Đang chờ'}
                             </span>
                           </td>
-                          <td style={{ padding: '1rem' }}>
-                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <td>
+                            <div className="admin-actions-cell">
                               {r.status !== 'processed' && (
                                 <>
-                                  <button onClick={() => processReport(r.reportId, 'block', 'Locked for violation')} className="btn-mini-action" style={{ background: '#ef4444', color: 'white' }}>Khóa User</button>
-                                  <button onClick={() => processReport(r.reportId, 'dismiss', 'Dismissed')} className="btn-mini-action">Bỏ qua</button>
+                                  <button onClick={() => processReport(r.reportId, 'block', 'Locked for violation')} className="btn-mini-action" style={{ background: '#ef4444', color: 'white', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0110 0v4" /></svg>
+                                    Khóa User
+                                  </button>
+                                  <button onClick={() => processReport(r.reportId, 'dismiss', 'Dismissed')} className="btn-mini-action" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    Bỏ qua
+                                  </button>
                                 </>
                               )}
                             </div>
@@ -1492,7 +1636,7 @@ function Home() {
                           value={auditRoomId} 
                           style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: '1px solid #ddd', background: '#fff' }}
                         />
-                        <button type="submit" disabled={!auditRoomId || isContentLoading} className="btn-primary" style={{ background: '#1e293b' }}>
+                        <button type="submit" disabled={!auditRoomId || isContentLoading} className="btn-primary" style={{ background: '#2563eb' }}>
                           {isContentLoading ? 'Đang truy xuất...' : 'Truy xuất lịch sử'}
                         </button>
                       </form>
@@ -1519,6 +1663,65 @@ function Home() {
                       </div>
                     </div>
                   </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'auditLogs' && user.role?.toLowerCase() === 'admin' && (
+            <div className="admin-management-container" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', animation: 'fadeIn 0.4s' }}>
+              <div>
+                <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: '#1e293b' }}>Lịch sử hành động</h2>
+                <p style={{ color: '#64748b' }}>Theo dõi vết các hành động quan trọng từ Ban quản trị hệ thống.</p>
+              </div>
+
+              <div className="admin-content-list" style={{ background: 'white', borderRadius: '20px', padding: '1.5rem', border: '1px solid #eee', minHeight: '400px', overflowX: 'auto' }}>
+                {isAuditLogsLoading ? (
+                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '300px' }}>
+                    <div className="processing-spinner"></div>
+                  </div>
+                ) : (
+                  <table className="admin-modern-table audit-logs-table">
+                    <thead>
+                      <tr>
+                        <th>Thời gian</th>
+                        <th>Quản trị viên</th>
+                        <th>Hành động</th>
+                        <th>Đối tượng</th>
+                        <th className="desktop-only">Chi tiết</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {auditLogs.map(log => (
+                        <tr key={log.logId}>
+                          <td>
+                            <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{new Date(log.createdAt).toLocaleDateString('vi-VN')}</div>
+                            <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{new Date(log.createdAt).toLocaleTimeString('vi-VN')}</div>
+                          </td>
+                          <td>
+                            <div className="admin-user-info">
+                              <span className="user-primary">{log.admin?.fullName || "Admin"}</span>
+                              <span className="user-secondary">ID: {log.admin?.userId}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <span className={`status-pill ${log.actionType?.includes('BLOCK') || log.actionType?.includes('DELETE') ? 'rejected' : 'resolved'}`} style={{ fontSize: '0.65rem' }}>
+                              {log.actionType}
+                            </span>
+                          </td>
+                          <td>
+                            <span style={{ fontWeight: 600, color: '#1e293b' }}>{log.targetId || "N/A"}</span>
+                          </td>
+                          <td className="desktop-only">
+                            <div style={{ fontSize: '0.85rem', color: '#64748b', maxWidth: '300px' }}>{log.description || "-"}</div>
+                          </td>
+                        </tr>
+                      ))}
+                      {auditLogs.length === 0 && (
+                        <tr><td colSpan="5" style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>Chưa có dữ liệu lịch sử nào.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
                 )}
               </div>
             </div>

@@ -303,13 +303,22 @@ const CallModal = forwardRef(({ socket, currentUser }, ref) => {
                                   <div className="caller-avatar-epic">{callData?.callerName?.charAt(0) || 'U'}</div>
                                   <h2>{callData?.callerName}</h2>
                                   <p>{callState === 'outgoing' ? 'Đang đổ chuông...' : 'Đang trong cuộc gọi thoại 0:00'}</p>
-                                    {/* Dummy video to keep stream active without displaying */}
+                                    
+                                    {/* Remote Audio support for voice calls */}
+                                    <video ref={(el) => {
+                                           remoteVideoRef.current = el;
+                                           if (el && remoteStreamRef.current && el.srcObject !== remoteStreamRef.current) {
+                                               el.srcObject = remoteStreamRef.current;
+                                           }
+                                        }} autoPlay playsInline style={{display: 'none'}} />
+
+                                    {/* Local preview dummy */}
                                     <video ref={(el) => {
                                            localVideoRef.current = el;
                                            if (el && localStreamRef.current && el.srcObject !== localStreamRef.current) {
                                                el.srcObject = localStreamRef.current;
                                            }
-                                       }} autoPlay playsInline muted style={{display: 'none'}} />
+                                        }} autoPlay playsInline muted style={{display: 'none'}} />
                                  </div>
                            )}
                        </div>
