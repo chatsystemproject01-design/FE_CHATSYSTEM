@@ -1,0 +1,98 @@
+.landing-card {
+    width: 100%;
+    max-width: 450px;
+    padding: 3rem 2.5rem;
+    background: var(--card-bg);
+    border-radius: 24px;
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-lg);
+    
+    /* Cấu trúc Flexbox để căn giữa mọi thứ bên trong */
+    display: flex;
+    flex-direction: column;
+    align-items: center; 
+    text-align: center;
+    
+    animation: fadeIn 0.8s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.landing-logo-section {
+    margin-bottom: 2rem;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+}
+
+.landing-logo-img {
+    width: 100px;
+    height: 100px;
+    object-fit: contain;
+}
+
+.landing-text-section {
+    margin-bottom: 2.5rem;
+    width: 100%; /* Đảm bảo section chiếm hết chiều ngang để căn giữa chuẩn */
+}
+
+.landing-title {
+    font-size: 1.3rem; /* Thu nhỏ một chút cho thanh thoát */
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+    width: 100%;
+}
+
+.landing-company {
+    font-size: 2.2rem;
+    font-weight: 900;
+    color: var(--primary-blue);
+    margin: 0 0 1rem 0; /* Xóa mọi margin mặc định có thể gây lệch */
+    padding: 0;
+    width: 100%;
+    text-align: center; /* Đảm bảo chữ luôn ở giữa */
+}
+
+.landing-desc {
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin: 0 auto;
+    max-width: 320px;
+}
+
+.landing-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    width: 100%; 
+    margin-bottom: 1.5rem;
+}
+
+.landing-btn {
+    width: 100%;
+    padding: 0.9rem !important;
+    border-radius: 14px !important;
+    font-size: 1rem !important;
+    font-weight: 600 !important;
+}
+
+.landing-footer {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    opacity: 0.6;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(15px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+    .landing-card {
+        padding: 2.5rem 1.5rem;
+        margin: 0 1rem;
+        border-radius: 20px;
+        width: auto;
+    }
+}

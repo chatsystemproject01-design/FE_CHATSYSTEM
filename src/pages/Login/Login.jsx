@@ -18,6 +18,14 @@ function Login() {
   const [loading, setLoading] = useState(false)
   const [countdown, setCountdown] = useState(0)
 
+  // Forgot Password States
+  const [showForgotModal, setShowForgotModal] = useState(false)
+  const [forgotStep, setForgotStep] = useState(1) // 1: Email, 2: Reset
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [resetData, setResetData] = useState({ otpCode: '', newPassword: '', confirmPassword: '' })
+  const [forgotError, setForgotError] = useState('')
+  const [forgotSuccess, setForgotSuccess] = useState('')
+
   // Xử lý đếm ngược 60s cho nút gửi lại mã
   React.useEffect(() => {
     let timer
@@ -73,7 +81,7 @@ function Login() {
       if (response.status === 200) {
         const { user, access_token } = response.data.data
         login(user, access_token)
-        navigate('/')
+        navigate('/chat')
       }
     } catch (err) {
       setError(
@@ -102,6 +110,48 @@ function Login() {
         err.response?.data?.message || 
         'Không thể gửi lại mã lúc này. Vui lòng thử lại sau.'
       )
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleForgotSubmit = async (e) => {
+    e.preventDefault()
+    setForgotError('')
+    setLoading(true)
+    try {
+      const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1'
+      await axios.post(`${API_URL}/auth/forgot-password`, { email: forgotEmail })
+      setForgotStep(2)
+    } catch (err) {
+      setForgotError(err.response?.data?.message || 'Email không tồn tại.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleResetSubmit = async (e) => {
+    e.preventDefault()
+    if (resetData.newPassword !== resetData.confirmPassword) {
+      return setForgotError('Mật khẩu xác nhận không khớp.')
+    }
+    setForgotError('')
+    setLoading(true)
+    try {
+      const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1'
+      await axios.post(`${API_URL}/auth/reset-password`, {
+        email: forgotEmail,
+        otpCode: resetData.otpCode,
+        newPassword: resetData.newPassword
+      })
+      setForgotSuccess('Đổi mật khẩu thành công! Hãy đăng nhập lại.')
+      setTimeout(() => {
+        setShowForgotModal(false)
+        setForgotStep(1)
+        setForgotSuccess('')
+      }, 2000)
+    } catch (err) {
+      setForgotError(err.response?.data?.message || 'OTP sai hoặc hết hạn.')
     } finally {
       setLoading(false)
     }
@@ -197,13 +247,62 @@ function Login() {
               <span className="link-item" onClick={() => navigate('/')}>
                 ← Trang chủ
               </span>
-              <span className="link-item" onClick={() => navigate('/register')}>
-                Chưa có tài khoản? Đăng ký
-              </span>
+              <div style={{ display: 'flex', gap: '15px' }}>
+                <span className="link-item" onClick={() => setShowForgotModal(true)}>
+                  Quên mật khẩu?
+                </span>
+                <span className="link-item" onClick={() => navigate('/register')}>
+                  Đăng ký
+                </span>
+              </div>
             </div>
           )}
         </div>
       </div>
+
+      {showForgotModal && (
+        <div className="modal-overlay">
+          <div className="modal-card">
+            <button className="modal-close" onClick={() => setShowForgotModal(false)}>×</button>
+            <h3>{forgotStep === 1 ? 'Khôi phục mật khẩu' : 'Đặt lại mật khẩu'}</h3>
+            
+            {forgotError && <div className="error-message">{forgotError}</div>}
+            {forgotSuccess && <div className="success-message-simple">{forgotSuccess}</div>}
+
+            {forgotStep === 1 ? (
+              <form onSubmit={handleForgotSubmit}>
+                <p className="modal-desc">Nhập email của bạn để nhận mã xác thực.</p>
+                <div className="form-group">
+                  <label>Email khôi phục</label>
+                  <input type="email" value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)} placeholder="name@company.com" required />
+                </div>
+                <button type="submit" className="btn-primary submit-btn" disabled={loading}>
+                  {loading ? 'Đang gửi...' : 'Gửi mã xác thực'}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleResetSubmit}>
+                <p className="modal-desc">Nhập mã OTP đã gửi đến <b>{forgotEmail}</b> và mật khẩu mới.</p>
+                <div className="form-group">
+                  <label>Mã OTP</label>
+                  <input type="text" value={resetData.otpCode} onChange={(e) => setResetData({...resetData, otpCode: e.target.value})} placeholder="123456" required />
+                </div>
+                <div className="form-group">
+                  <label>Mật khẩu mới</label>
+                  <input type="password" value={resetData.newPassword} onChange={(e) => setResetData({...resetData, newPassword: e.target.value})} placeholder="••••••••" required />
+                </div>
+                <div className="form-group">
+                  <label>Xác nhận mật khẩu</label>
+                  <input type="password" value={resetData.confirmPassword} onChange={(e) => setResetData({...resetData, confirmPassword: e.target.value})} placeholder="••••••••" required />
+                </div>
+                <button type="submit" className="btn-primary submit-btn" disabled={loading}>
+                  {loading ? 'Đang xử lý...' : 'Xác nhận đổi mật khẩu'}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

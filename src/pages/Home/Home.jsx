@@ -11,11 +11,27 @@ function Home() {
   const { user, login: updateAuthUser, logout: authLogout } = useAuth()
   const [activeTab, setActiveTab] = useState('messages')
 
-  const [profileData, setProfileData] = useState({ fullName: '', phoneNumber: '', dateOfBirth: '', position: '', avatarUrl: '' })
+  const [profileData, setProfileData] = useState({ 
+    fullName: '', 
+    email: '', 
+    phoneNumber: '', 
+    dateOfBirth: '', 
+    position: '', 
+    department: '', 
+    role: '',
+    avatarUrl: '' 
+  })
   const [isEditing, setIsEditing] = useState(false)
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const avatarInputRef = useRef(null)
   const [contacts, setContacts] = useState([])
   const [searchResults, setSearchResults] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
+  const [reportHistory, setReportHistory] = useState([])
+  const [reportReasons, setReportReasons] = useState([])
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [reportingUser, setReportingUser] = useState(null)
+  const [reportData, setReportData] = useState({ reasonType: '', description: '' })
   const [conversations, setConversations] = useState([])
   const [activeChat, setActiveChat] = useState(null)
   const [chatDetail, setChatDetail] = useState(null)
@@ -125,6 +141,11 @@ function Home() {
       })
     })
 
+    // Lắng nghe sự kiện kết bạn/hủy kết bạn để auto-refresh danh bạ
+    socketRef.current.on('contact_updated', () => {
+      fetchContacts()
+    })
+
     return () => socketRef.current?.disconnect()
   }, [user, token])
 
@@ -153,18 +174,83 @@ function Home() {
 
   const handleSearch = async (e) => {
     e.preventDefault()
-    if (searchQuery.length < 2) return
+    if (!searchQuery.trim() || searchQuery.trim().length < 2) {
+      alert("Vui lòng nhập tối thiểu 2 ký tự để tìm kiếm.")
+      return
+    }
     try {
-      const resp = await axios.get(`${API_URL}/users/search?q=${searchQuery}`, axiosConfig)
-      if (resp.data.success) setSearchResults(resp.data.data)
-    } catch (err) { console.error(err) }
+      const resp = await axios.get(`${API_URL}/users/search?q=${encodeURIComponent(searchQuery)}`, axiosConfig)
+      if (resp.data.success) {
+        setSearchResults(resp.data.data || [])
+        if (resp.data.data.length === 0) {
+          alert("Không tìm thấy người dùng phù hợp.")
+        }
+      }
+    } catch (err) { 
+      alert(err.response?.data?.message || "Lỗi khi tìm kiếm người dùng")
+    }
   }
 
   const addContact = async (colleagueId) => {
     try {
-      const resp = await axios.post(`${API_URL}/users/contacts`, { colleagueId }, axiosConfig)
-      if (resp.data.success) { fetchContacts(); handleSearch({ preventDefault: () => { } }) }
+      await axios.post(`${API_URL}/users/contacts`, { colleagueId }, axiosConfig)
+      alert("Đã thêm vào danh bạ thành công!")
+      fetchContacts()
+      setSearchResults([])
+      setSearchQuery('')
+    } catch (err) { alert(err.response?.data?.message || "Lỗi khi thêm liên hệ") }
+  }
+
+  const handleRemoveContact = async (colleagueId) => {
+    if (!window.confirm("Bạn có chắc chắn muốn xóa người này khỏi danh bạ?")) return
+    try {
+      await axios.delete(`${API_URL}/users/contacts/${colleagueId}`, axiosConfig)
+      alert("Đã xóa khỏi danh sách liên hệ.")
+      fetchContacts()
+    } catch (err) { alert(err.response?.data?.message || "Lỗi khi xóa liên hệ") }
+  }
+
+  const handleBlockUser = async (targetUserId) => {
+    if (!window.confirm("Chặn người dùng này? Bạn sẽ không thể thấy tin nhắn của họ nữa.")) return
+    try {
+      await axios.post(`${API_URL}/users/block`, { targetUserId }, axiosConfig)
+      alert("Đã chặn người dùng thành công.")
+      fetchContacts()
+    } catch (err) { alert(err.response?.data?.message || "Lỗi khi chặn người dùng") }
+  }
+
+  const fetchReportReasons = async () => {
+    try {
+      const resp = await axios.get(`${API_URL}/users/report/reasons`, axiosConfig)
+      if (resp.data.success) setReportReasons(resp.data.data || [])
     } catch (err) { console.error(err) }
+  }
+
+  const fetchMyReports = async () => {
+    try {
+      const resp = await axios.get(`${API_URL}/users/reports/me`, axiosConfig)
+      if (resp.data.success) setReportHistory(resp.data.data || [])
+    } catch (err) { console.error(err) }
+  }
+
+  const handleOpenReport = (user) => {
+    setReportingUser(user)
+    fetchReportReasons()
+    setShowReportModal(true)
+  }
+
+  const submitReport = async (e) => {
+    e.preventDefault()
+    try {
+      await axios.post(`${API_URL}/users/report`, {
+        reportedUserId: reportingUser.userId,
+        ...reportData
+      }, axiosConfig)
+      alert("Cảm ơn bạn đã báo cáo. Chúng tôi sẽ xử lý sớm.")
+      setShowReportModal(false)
+      setReportData({ reasonType: '', description: '' })
+      if (activeTab === 'profile') fetchMyReports()
+    } catch (err) { alert(err.response?.data?.message || "Lỗi khi gửi báo cáo") }
   }
 
   const handleStartPersonalChat = async (targetUserId) => {
@@ -505,13 +591,18 @@ function Home() {
     if (!user && !sessionStorage.getItem('access_token')) {
       navigate('/login')
     }
-    if (activeTab === 'profile') fetchProfile()
+    // Chỉ fetch khi chuyển tab và không phải đang sửa
+    if (activeTab === 'profile') {
+      fetchProfile()
+      fetchMyReports()
+    }
     if (activeTab === 'contacts') fetchContacts()
     if (activeTab === 'messages') { fetchConversations(); fetchContacts() }
     if (activeTab === 'admin') { fetchPendingUsers(); fetchAdminUsers(); }
     if (activeTab === 'content') { fetchReports(); fetchAdminConversations(); }
     if (activeTab === 'config') { fetchSystemConfig(); fetchSystemHealth(); }
-  }, [activeTab, user, navigate])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
 
   if (!user) return null
 
@@ -523,29 +614,29 @@ function Home() {
         </div>
         <nav className="sidebar-nav">
           <div className={`nav-item ${activeTab === 'overview' ? 'active' : ''}`} onClick={() => setActiveTab('overview')}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
             <span>Tổng quan</span>
           </div>
 
           <div className={`nav-item ${activeTab === 'messages' ? 'active' : ''}`} onClick={() => setActiveTab('messages')}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
             <span>Tin nhắn</span>
           </div>
 
           <div className={`nav-item ${activeTab === 'contacts' ? 'active' : ''}`} onClick={() => setActiveTab('contacts')}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
             <span>Danh bạ</span>
           </div>
 
           <div className={`nav-item ${activeTab === 'profile' ? 'active' : ''}`} onClick={() => setActiveTab('profile')}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
             <span>Hồ sơ</span>
           </div>
 
           <div className="sidebar-divider" style={{ height: '1px', background: '#eee', margin: '0.5rem 1rem' }}></div>
 
           <div className={`nav-item ${activeTab === 'aibot' ? 'active' : ''}`} onClick={() => setActiveTab('aibot')}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><path d="M12 7v5"></path><path d="M12 16v.01"></path></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
             <span>Hỏi đáp AI</span>
           </div>
 
@@ -728,62 +819,343 @@ function Home() {
           )}
 
           {activeTab === 'contacts' && (
-            <div className="contacts-layout" style={{ flexDirection: 'column' }}>
-              <div className="search-section" style={{ marginBottom: '2rem' }}>
-                <form onSubmit={handleSearch} style={{ display: 'flex', gap: '1rem' }}>
-                  <input type="text" placeholder="Tìm người dùng..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ flex: 1, padding: '0.75rem', borderRadius: '10px', border: '1px solid #ddd' }} />
-                  <button type="submit" className="btn-primary">Tìm</button>
+            <div className="contacts-container-refined">
+              <div className="contacts-search-header">
+                <form onSubmit={handleSearch} className="contact-search-box">
+                  <div className="search-input-group">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    <input 
+                      type="text" 
+                      placeholder="Tìm kiếm đồng nghiệp theo tên hoặc email..." 
+                      value={searchQuery} 
+                      onChange={e => setSearchQuery(e.target.value)} 
+                    />
+                  </div>
+                  <button type="submit" className="btn-primary search-submit-btn">Tìm kiếm</button>
                 </form>
+
                 {searchResults.length > 0 && (
-                  <div style={{ marginTop: '1rem', background: 'white', borderRadius: '10px', padding: '1rem', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-                    {searchResults.map(r => (
-                      <div key={r.userId} className="contact-item-card" style={{ justifyContent: 'space-between' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                          <div className="user-avatar-med">{r.fullName?.charAt(0) || '?'}</div>
-                          <span>{r.fullName || 'Người dùng'}</span>
+                  <div className="search-results-overlay">
+                    <div className="results-header">
+                      <span>Tìm thấy {searchResults.length} người dùng</span>
+                      <button onClick={() => setSearchResults([])}>Đóng</button>
+                    </div>
+                    <div className="results-list">
+                      {searchResults.map(r => (
+                        <div key={r.userId} className="search-result-item">
+                          <div className="result-left">
+                            <div className="user-avatar-small">
+                              {r.avatarUrl ? <img src={r.avatarUrl} alt="A" /> : r.fullName?.charAt(0)}
+                            </div>
+                            <div className="result-info">
+                              <span className="result-name">{r.fullName}</span>
+                              <span className="result-email">{r.email}</span>
+                            </div>
+                          </div>
+                          <button className="btn-add-contact" onClick={() => addContact(r.userId)}>+ Kết bạn</button>
                         </div>
-                        <button className="btn-primary" onClick={() => addContact(r.userId)}>+ Kết bạn</button>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
-              <div className="my-contacts-section">
-                <h3>Danh bạ của bạn</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
+
+              <div className="my-contacts-main-section">
+                <div className="section-header-row">
+                  <h3>Danh bạ của bạn ({contacts.length})</h3>
+                  <button className="refresh-contacts-btn" onClick={fetchContacts} title="Làm mới">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                  </button>
+                </div>
+
+                <div className="contacts-cards-grid">
                   {contacts.map(c => (
-                    <div key={c.userId} className="contact-item-card" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                        <div className="user-avatar-med">{c.fullName?.charAt(0) || '?'}</div>
-                        <div className="contact-item-info">
-                          <span style={{ fontWeight: 700, display: 'block' }}>{c.fullName || 'Người dùng'}</span>
-                          <span style={{ fontSize: '0.8rem', opacity: 0.7 }}>Online</span>
+                    <div key={c.userId} className="contact-modern-card">
+                      <div className="contact-card-top">
+                        <div className={`contact-card-avatar ${c.status === 'active' ? 'online' : ''}`}>
+                          {c.avatarUrl ? <img src={c.avatarUrl} alt="A" /> : <span>{c.fullName?.charAt(0)}</span>}
+                          <div className="status-dot"></div>
+                        </div>
+                        <div className="contact-card-main-info">
+                          <h4 title={c.fullName}>{c.fullName}</h4>
+                          <p>{c.position || 'Thành viên'}</p>
                         </div>
                       </div>
-                      <button className="icon-btn" onClick={() => handleStartPersonalChat(c.userId)} title="Nhắn tin & Gọi">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-                      </button>
+                      
+                      <div className="contact-card-footer">
+                        <div className="contact-footer-left">
+                          <div className={`contact-status-text ${c.status === 'active' ? 'badge-online' : 'badge-offline'}`}>
+                            {c.status === 'active' ? 'Trực tuyến' : 'Ngoại tuyến'}
+                          </div>
+                          <div className="contact-card-actions-row">
+                            <button className="btn-card-action" onClick={() => handleOpenReport(c)} title="Báo cáo">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></svg>
+                            </button>
+                            <button className="btn-card-action text-danger" onClick={() => handleBlockUser(c.userId)} title="Chặn">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
+                            </button>
+                            <button className="btn-card-action text-danger" onClick={() => handleRemoveContact(c.userId)} title="Xóa">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                            </button>
+                          </div>
+                        </div>
+                        <button className="btn-action-chat" onClick={() => handleStartPersonalChat(c.userId)}>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                          <span>Nhắn tin</span>
+                        </button>
+                      </div>
                     </div>
                   ))}
+                  
+                  {contacts.length === 0 && (
+                    <div className="contacts-empty-state">
+                      <div className="empty-icon">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                      </div>
+                      <p>Bạn chưa có người bạn nào trong danh bạ.</p>
+                      <small>Sử dụng thanh tìm kiếm phía trên để kết nối với đồng nghiệp.</small>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           )}
 
           {activeTab === 'profile' && (
-            <div className="profile-card" style={{ maxWidth: '800px', margin: '0 auto' }}>
-              <div className="profile-sidebar-info" style={{ textAlign: 'center', padding: '2rem' }}>
-                <div className="user-avatar-med" style={{ width: 100, height: 100, fontSize: '3rem', margin: '0 auto 1rem' }}>{user.fullName?.charAt(0)}</div>
-                <h2>{profileData.fullName || user.fullName}</h2>
-                <p>{user.email}</p>
-              </div>
-              <div className="profile-form-container" style={{ flex: 1 }}>
-                <form onSubmit={async e => { e.preventDefault(); try { await axios.patch(`${API_URL}/users/profile`, profileData, axiosConfig); setIsEditing(false); fetchProfile(); } catch (err) { alert(err.response?.data?.message); } }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
-                    <div><label>Họ và tên</label><input type="text" value={profileData.fullName} onChange={e => setProfileData({ ...profileData, fullName: e.target.value })} disabled={!isEditing} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #ddd' }} /></div>
+            <div className="profile-view-container">
+              <div className="profile-main-card">
+                {/* Profile Left: Basic Identity */}
+                <div className="profile-identity-section">
+                  {/* Avatar click-to-upload */}
+                  <div 
+                    className={`profile-avatar-big avatar-upload-trigger ${avatarUploading ? 'avatar-uploading' : ''}`}
+                    onClick={() => !avatarUploading && avatarInputRef.current?.click()}
+                    title="Nhấp để thay đổi ảnh đại diện"
+                  >
+                    {avatarUploading ? (
+                      <div className="avatar-spinner" />
+                    ) : profileData.avatarUrl ? (
+                      <img src={profileData.avatarUrl} alt="Avatar" className="avatar-img" />
+                    ) : (
+                      <span>{profileData.fullName?.charAt(0) || 'U'}</span>
+                    )}
+                    <div className="avatar-overlay">
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                        <circle cx="12" cy="13" r="4"/>
+                      </svg>
+                      <span>Đổi ảnh</span>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-                    {!isEditing ? <button type="button" className="btn-primary" onClick={() => setIsEditing(true)}>Chỉnh sửa hồ sơ</button> : <><button type="button" onClick={() => setIsEditing(false)}>Hủy</button><button type="submit" className="btn-primary">Lưu</button></>}
+
+                  {/* Hidden file input - chỉ chấp nhận ảnh */}
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    style={{ display: 'none' }}
+                    onChange={async (e) => {
+                      const file = e.target.files[0]
+                      if (!file) return
+
+                      // Validate phía client trước
+                      const ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+                      if (!ALLOWED.includes(file.type)) {
+                        alert('Chỉ chấp nhận định dạng JPG, PNG, WEBP, GIF.')
+                        return
+                      }
+                      if (file.size > 5 * 1024 * 1024) {
+                        alert('Kích thước ảnh quá lớn. Tối đa 5MB.')
+                        return
+                      }
+
+                      // Preview ngay lập tức trước khi upload
+                      const previewUrl = URL.createObjectURL(file)
+                      setProfileData(prev => ({ ...prev, avatarUrl: previewUrl }))
+
+                      // Upload lên server
+                      setAvatarUploading(true)
+                      try {
+                        const formData = new FormData()
+                        formData.append('avatar', file)
+                        const resp = await axios.post(
+                          `${API_URL}/users/avatar`,
+                          formData,
+                          { headers: { ...axiosConfig.headers, 'Content-Type': 'multipart/form-data' } }
+                        )
+                        if (resp.data.success) {
+                          setProfileData(prev => ({ ...prev, avatarUrl: resp.data.data.avatarUrl }))
+                        }
+                      } catch (err) {
+                        alert(err.response?.data?.message || 'Upload ảnh thất bại.')
+                        // Rollback preview nếu upload thất bại
+                        setProfileData(prev => ({ ...prev, avatarUrl: profileData.avatarUrl }))
+                      } finally {
+                        setAvatarUploading(false)
+                        // Reset input để có thể chọn lại cùng file
+                        e.target.value = ''
+                      }
+                    }}
+                  />
+
+                  <h2 className="profile-name-text">{profileData.fullName}</h2>
+                  <p className="profile-email-text">{profileData.email}</p>
+                  
+                  <div className="profile-status-badge">
+                    <span className="status-indicator-dot"></span> Đang hoạt động
+                  </div>
+
+                  <p className="avatar-hint">Nhấn vào ảnh để thay đổi</p>
+                </div>
+
+                {/* Profile Right: Detailed Form */}
+                <div className="profile-details-section">
+                  <form className="profile-form-grid" onSubmit={async e => { 
+                    e.preventDefault(); 
+                    try { 
+                      // Chỉ gửi các trường API yêu cầu theo Hình 1
+                      const updatePayload = {
+                        fullName: profileData.fullName || '',
+                        dateOfBirth: profileData.dateOfBirth ? profileData.dateOfBirth.split('T')[0] : null,
+                        phoneNumber: profileData.phoneNumber || '',
+                        position: profileData.position || '',
+                        avatarUrl: profileData.avatarUrl || ''
+                      };
+                      await axios.patch(`${API_URL}/users/profile`, updatePayload, axiosConfig); 
+                      setIsEditing(false); 
+                      fetchProfile(); 
+                      alert("Cập nhật hồ sơ thành công!");
+                    } catch (err) { 
+                      alert(err.response?.data?.message || "Lỗi khi cập nhật"); 
+                    } 
+                  }}>
+                    <div className="profile-inputs-grid">
+                      <div className="profile-input-item">
+                        <label>Họ và tên</label>
+                        <input type="text" value={profileData.fullName || ''} onChange={e => setProfileData({ ...profileData, fullName: e.target.value })} disabled={!isEditing} placeholder="Nhập họ tên" />
+                      </div>
+                      <div className="profile-input-item">
+                        <label>Email (Không thể thay đổi)</label>
+                        <input type="email" value={profileData.email || ''} disabled className="disabled-input" />
+                      </div>
+                      <div className="profile-input-item">
+                        <label>Số điện thoại</label>
+                        <input type="tel" value={profileData.phoneNumber || ''} onChange={e => setProfileData({ ...profileData, phoneNumber: e.target.value })} disabled={!isEditing} placeholder="Số điện thoại" />
+                      </div>
+                      <div className="profile-input-item">
+                        <label>Ngày sinh</label>
+                        <input type="date" value={profileData.dateOfBirth ? profileData.dateOfBirth.split('T')[0] : ''} onChange={e => setProfileData({ ...profileData, dateOfBirth: e.target.value })} disabled={!isEditing} />
+                      </div>
+                      <div className="profile-input-item">
+                        <label>Chức danh</label>
+                        <input type="text" value={profileData.position || ''} onChange={e => setProfileData({ ...profileData, position: e.target.value })} disabled={!isEditing} placeholder="Vị trí công việc" />
+                      </div>
+                      <div className="profile-input-item">
+                        <label>Phòng ban</label>
+                        <input type="text" value={profileData.department || ''} onChange={e => setProfileData({ ...profileData, department: e.target.value })} disabled={!isEditing} placeholder="Phòng ban làm việc" />
+                      </div>
+                      <div className="profile-input-item">
+                        <label>Quyền hạn</label>
+                        <input type="text" value={profileData.role === 'admin' ? 'Quản trị viên' : 'Nhân viên'} disabled className="disabled-input" />
+                      </div>
+                    </div>
+
+                    <div className="profile-form-actions">
+                      {!isEditing ? (
+                        <button type="button" className="btn-primary profile-action-btn" onClick={() => setIsEditing(true)}>
+                          Chỉnh sửa hồ sơ
+                        </button>
+                      ) : (
+                        <div className="profile-editing-buttons">
+                          <button type="button" className="btn-ghost" onClick={() => setIsEditing(false)}>Hủy</button>
+                          <button type="submit" className="btn-primary profile-action-btn">Lưu thay đổi</button>
+                        </div>
+                      )}
+                    </div>
+                  </form>
+                </div>
+
+              </div>
+
+              {!isEditing && (
+                <div className="profile-bottom-card" style={{ marginTop: '2.5rem', width: '100%' }}>
+                  <div className="profile-reports-history">
+                    <div className="section-header-row">
+                      <h4>Lịch sử báo cáo đã gửi</h4>
+                      <button className="refresh-contacts-btn" onClick={fetchMyReports} title="Làm mới">
+                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                      </button>
+                    </div>
+                    <div className="reports-table-container">
+                      {reportHistory.length > 0 ? (
+                        <table className="reports-table">
+                          <thead>
+                            <tr>
+                              <th>Ngày gửi</th>
+                              <th>Đối tượng</th>
+                              <th>Lý do</th>
+                              <th>Trạng thái</th>
+                              <th>Phản hồi Admin</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {reportHistory.map(r => (
+                              <tr key={r.reportId}>
+                                <td>{new Date(r.createdAt).toLocaleDateString()}</td>
+                                <td className="reported-user-name">@{r.reportedUser?.fullName || 'Người dùng'}</td>
+                                <td><strong>{r.reasonType}</strong></td>
+                                <td>
+                                  <span className={`status-pill ${r.status}`}>
+                                    {r.status === 'pending' ? 'Đang chờ' : r.status === 'resolved' ? 'Đã xử lý' : 'Đã bác bỏ'}
+                                  </span>
+                                </td>
+                                <td className="admin-note">{r.adminNote || 'Chưa có phản hồi'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      ) : (
+                        <div className="no-reports-box">
+                          <p>Bạn chưa gửi báo cáo vi phạm nào.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {showReportModal && (
+            <div className="modal-overlay-custom">
+              <div className="report-modal-card">
+                <h3>Báo cáo người dùng: {reportingUser?.fullName}</h3>
+                <form onSubmit={submitReport}>
+                  <div className="form-group-custom">
+                    <label>Lý do báo cáo:</label>
+                    <select 
+                      value={reportData.reasonType} 
+                      onChange={e => setReportData({...reportData, reasonType: e.target.value})}
+                      required
+                    >
+                      <option value="">-- Chọn lý do --</option>
+                      {reportReasons.map(reason => (
+                        <option key={reason} value={reason}>{reason}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group-custom">
+                    <label>Mô tả chi tiết:</label>
+                    <textarea 
+                      placeholder="Mô tả hành vi vi phạm..."
+                      value={reportData.description}
+                      onChange={e => setReportData({...reportData, description: e.target.value})}
+                      required
+                    />
+                  </div>
+                  <div className="modal-actions-custom">
+                    <button type="button" className="btn-cancel-custom" onClick={() => setShowReportModal(false)}>Hủy</button>
+                    <button type="submit" className="btn-submit-custom">Gửi báo cáo</button>
                   </div>
                 </form>
               </div>

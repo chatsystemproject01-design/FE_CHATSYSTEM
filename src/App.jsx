@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import axios from 'axios'
 import { AuthProvider } from './context/AuthContext'
 import Home from './pages/Home/Home'
+import Landing from './pages/Landing/Landing'
 import Register from './pages/Register/Register'
 import Login from './pages/Login/Login'
 import ForgotPassword from './pages/ForgotPassword/ForgotPassword'
@@ -42,7 +43,8 @@ function App() {
       <Router>
         <div className="app-container">
           <Routes>
-            <Route path="/" element={<Home />} />
+            <Route path="/" element={<Landing />} />
+            <Route path="/chat" element={<Home />} />
             <Route path="/register" element={<Register />} />
             <Route path="/login" element={<Login />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
